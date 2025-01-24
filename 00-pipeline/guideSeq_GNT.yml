@@ -7,10 +7,10 @@ version: 0.1
 ## Library informations
 sampleInfo_path: "sampleInfo.csv"
 
-R1: "/media/Data/common/guideseq_gnt_dev/margaux_5/Undetermined_S0_L001_R1_001.fastq.gz"
-R2: "/media/Data/common/guideseq_gnt_dev/margaux_5/Undetermined_S0_L001_R2_001.fastq.gz"
-I1: "/media/Data/common/guideseq_gnt_dev/margaux_5/Undetermined_S0_L001_I1_001.fastq.gz"
-I2: "/media/Data/common/guideseq_gnt_dev/margaux_5/Undetermined_S0_L001_I2_001.fastq.gz"
+R1: "/media/Data/common/guideseq_gnt_dev/margaux_4/Undetermined_S0_L001_R1_001.fastq.gz"
+R2: "/media/Data/common/guideseq_gnt_dev/margaux_4/Undetermined_S0_L001_R2_001.fastq.gz"
+I1: "/media/Data/common/guideseq_gnt_dev/margaux_4/Undetermined_S0_L001_I1_001.fastq.gz"
+I2: "/media/Data/common/guideseq_gnt_dev/margaux_4/Undetermined_S0_L001_I2_001.fastq.gz"
 
 
 ################################################
@@ -35,6 +35,7 @@ minLength: 25 ## Minimal read length after trimming, before alignment
 aligner: "bowtie2"   ## Aligner to use (bowtie2 or bwa)
 minFragLength: 100         # Minimal fragment length after alignment
 maxFragLength: 1500        # Maximal fragment length after alignment 
+multi_alignments: 10        # number of alignments to return when processing multihits
 ################################################
 
 ################################################

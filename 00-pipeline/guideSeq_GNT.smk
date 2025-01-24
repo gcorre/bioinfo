@@ -36,9 +36,9 @@ genomes_unique=list(set(genomes))
 
 rule target:
     input: "05-Report/report.html",
-     ["05-Report/{sample}.rdata".format(sample=sample) for sample in samples["sampleName"]],
-     expand("06-offPredict/{gen}_{grna}{pam}.csv", zip, grna=gRNAs, gen=genomes,pam=PAMs),
-     ["03-align/{sample}_multi.txt".format(sample=sample) for sample in samples["sampleName"]]
+     ["03-align/{sample}.UMI.ODN.trimmed.filtered.multi.realigned.bed".format(sample=sample) for sample in samples["sampleName"]]
+     #expand("06-offPredict/{gen}_{grna}{pam}.csv", zip, grna=gRNAs, gen=genomes,pam=PAMs),
+     #["03-align/{sample}_multi.txt".format(sample=sample) for sample in samples["sampleName"]]
      
      
 
@@ -180,7 +180,7 @@ if (config["aligner"]  == "bowtie2" or config["aligner"]  == "Bowtie2") :
             bowtie2 -p {threads} --no-unal -I {params.minFragLength} -X {params.maxFragLength} --dovetail --no-mixed --no-discordant --un-conc-gz 03-align/{wildcards.sample}_R%.UMI.ODN.trimmed.unmapped.fastq.gz   -x {params.index} -1 {input.R1} -2 {input.R2} -S {output.sam} 2> {log}
         """
         
-        
+
 elif (config["aligner"]  == "bwa" or config["aligner"]  == "Bwa") :
     rule alignOnGenome:
         input: R1=rules.filter_reads.output.R1, R2=rules.filter_reads.output.R2
@@ -197,13 +197,14 @@ elif (config["aligner"]  == "bwa" or config["aligner"]  == "Bwa") :
         """
 
 
-rule get_multihits_reads:
+rule get_R2_multihits_reads:
     input: sam=rules.alignOnGenome.output.sam
     output: list="03-align/{sample}_multi.txt"
     threads: 2
     conda: "../01-envs/env_tools.yml"
+    message: "identify R2 reads that have multiple hits with equal alignment score"
     shell: """
-        samtools view -@ {threads} {input} | awk '
+        samtools view -f 131 -@ {threads} {input} | awk '
             function abs(v) {{return v < 0 ? -v : v}}
             {{
                 as=""; xs=""
@@ -218,6 +219,60 @@ rule get_multihits_reads:
                     }}
             }}' > {output.list}
     """
+
+rule split_bam:
+    input: rnames=rules.get_R2_multihits_reads.output.list, bam = rules.alignOnGenome.output.sam
+    output: uniq="03-align/{sample}.UMI.ODN.trimmed.filtered.unique.bam", multi="03-align/{sample}.UMI.ODN.trimmed.filtered.multi.bam"
+    threads: 6
+    conda: "../01-envs/env_tools.yml"
+    shell: """
+        samtools view -hb -@ {threads} -N {input.rnames} -o {output.multi} -U {output.uniq} {input.bam}
+    """
+
+rule convert_bamtofastq:
+    input: rules.split_bam.output.multi
+    output: R1="03-align/{sample}.UMI.ODN.trimmed.filtered.multi.R1.fastq.gz", R2="03-align/{sample}.UMI.ODN.trimmed.filtered.multi.R2.fastq.gz"
+    threads: 2
+    conda: "../01-envs/env_tools.yml"
+    shell: """
+        samtools fastq -@ {threads} -1 {output.R1} -2 {output.R2}  {input}
+    """
+
+
+
+
+rule realign_multi:
+    input: R1=rules.convert_bamtofastq.output.R1, R2=rules.convert_bamtofastq.output.R2
+    output: sam=temp("03-align/{sample}.UMI.ODN.trimmed.filtered.multi.realigned.sam")
+    threads: 6
+    log: "03-align/{sample}.UMI.ODN.trimmed.filtered.realign.log"
+    conda: "../01-envs/env_tools.yml"
+    message: "Aligning PE reads on genome with Bowtie2"
+    params: index=lambda wildcards: config["genome"][samples["Genome"][wildcards.sample]]["index"],
+     minFragLength=config["minFragLength"],
+     maxFragLength=config["maxFragLength"],
+     k=config["multi_alignments"]
+    shell: """
+            bowtie2 -p {threads} -k {params.k} --no-unal -I {params.minFragLength} -X {params.maxFragLength} --dovetail --no-mixed --no-discordant --un-conc-gz 03-align/{wildcards.sample}_R%.UMI.ODN.trimmed.unmapped.fastq.gz   -x {params.index} -1 {input.R1} -2 {input.R2} -S {output.sam} 2> {log}
+        """
+
+
+rule multi_processing:
+    input: rules.realign_multi.output.sam
+    output: bed="03-align/{sample}.UMI.ODN.trimmed.filtered.multi.realigned.bed", info="03-align/{sample}.UMI.ODN.trimmed.filtered.multi.realigned.info"
+    conda: "../01-envs/env_tools.yml"
+    shell: """
+    
+        samtools view -h -f 131 {input} | bedtools bamtobed -i - -ed > {output.bed}
+        samtools view -f 131 {input} | awk 'BEGIN{{OFS="\\t"}} {{print $1,$3,$4,$9,$12}}' > {output.info}
+    """
+
+
+
+
+#### finish here
+
+
 
 
 # sort alignments by names (required for BEDPE conversion) and position (for viewing)
